@@ -34,11 +34,12 @@ them against the running app, fixes them, and hands back only the ones that pass
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `E2E_AGENT_API_KEY` | — | Required unless `--mock`. GitHub: repository **secret** |
-| `E2E_AGENT_MODEL` | `qwen3.6-27b` | Model id as your provider names it. GitHub: repository **variable** |
-| `E2E_AGENT_BASE_URL` | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` | Any OpenAI-compatible `/v1` URL; Model Studio also has per-workspace regional URLs. GitHub: **variable** |
+| `E2E_AGENT_BASE_URL` | — | Required unless `--mock`. Vercel AI Gateway: `https://ai-gateway.vercel.sh/v1`. GitHub: repository **variable** |
+| `E2E_AGENT_MODEL` | `qwen3.6-27b` | Model id as your provider names it. Vercel AI Gateway: `alibaba/qwen3.6-27b`. GitHub: repository **variable** |
 | `E2E_AGENT_ENABLE_THINKING` | provider default | `true`/`false` → Qwen's `enable_thinking` |
 | `E2E_AGENT_MAX_STEPS` | `40` | Model round-trips per run |
 | `E2E_AGENT_MAX_RUNS_PER_SPEC` | `5` | Bounds the fix loop |
+| `E2E_AGENT_MAX_RPM` | `0` (no pacing) | Max model requests per minute, e.g. `5` for a 5 req/min gateway limit. HTTP 429s are always waited out (provider's `Retry-After`, else 60s; up to 5 times). GitHub: **variable** |
 
 ## Running locally
 
@@ -47,8 +48,9 @@ them against the running app, fixes them, and hands back only the ones that pass
 export DATABASE_URL="file:$PWD/prisma/e2e.db"
 npm run db:setup && NUXT_BUILD_DIR=.nuxt-e2e npm run build && PORT=3100 npm start &
 
-# 2a. Real model
-E2E_AGENT_API_KEY=… npm run agent -- --base master --base-url http://localhost:3100
+# 2a. Real model (all in the same shell session as the npm command)
+export E2E_AGENT_API_KEY=… E2E_AGENT_BASE_URL=https://ai-gateway.vercel.sh/v1 E2E_AGENT_MODEL=alibaba/qwen3.6-27b
+npm run agent -- --base master --base-url http://localhost:3100
 
 # 2b. Scripted mock model: exercises tools, loop, verification and report without an API key
 npm run agent -- --base master --base-url http://localhost:3100 --mock
@@ -68,7 +70,7 @@ Add the **`e2e-agent` label** to a PR. The workflow then:
    source PR instead.
 
 New pushes to the labelled PR re-run it and update the same agent PR. Setup:
-- Secret `E2E_AGENT_API_KEY`; optional variables `E2E_AGENT_MODEL`, `E2E_AGENT_BASE_URL`.
+- Secret `E2E_AGENT_API_KEY`; variables `E2E_AGENT_BASE_URL` (required) and `E2E_AGENT_MODEL`.
 - Settings → Actions → General → **Allow GitHub Actions to create and approve pull requests**.
 - A label named `e2e-agent`.
 

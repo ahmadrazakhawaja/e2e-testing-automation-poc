@@ -56,6 +56,7 @@ jobs:
           E2E_AGENT_MODEL: ${{ vars.E2E_AGENT_MODEL }}
           E2E_AGENT_BASE_URL: ${{ vars.E2E_AGENT_BASE_URL }}
           E2E_AGENT_ENABLE_THINKING: ${{ vars.E2E_AGENT_ENABLE_THINKING }}
+          E2E_AGENT_MAX_RPM: ${{ vars.E2E_AGENT_MAX_RPM }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

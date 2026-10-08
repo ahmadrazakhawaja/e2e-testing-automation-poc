@@ -43,7 +43,16 @@ async function main() {
   const baseURL = values['base-url']
   const outDir = path.resolve(REPO_ROOT, values.out)
   const config = loadConfig(process.env, values.mock ? { model: 'scripted-mock' } : {})
-  if (!values.mock && !config.apiKey) throw new Error('E2E_AGENT_API_KEY is not set (or pass --mock).')
+  if (!values.mock) {
+    // Checked up front: a key sent to the wrong provider fails later with a misleading "invalid API key".
+    const missing = ['E2E_AGENT_API_KEY', 'E2E_AGENT_BASE_URL'].filter((name) => !process.env[name])
+    if (missing.length) {
+      throw new Error(
+        `Not set: ${missing.join(', ')} (or pass --mock). In GitHub Actions the key is a repository secret, ` +
+          'E2E_AGENT_BASE_URL and E2E_AGENT_MODEL are repository variables (Variables tab, not Secrets).',
+      )
+    }
+  }
 
   const changes = getChangeSet(values.base, values.head)
   const report: AgentReport = {
@@ -64,14 +73,16 @@ async function main() {
   if (!health?.ok) throw new Error(`App is not reachable at ${baseURL} (start it first, see tools/e2e-agent/README.md)`)
 
   console.log(`Scope: ${[...changes.routes, ...changes.endpoints, ...changes.sharedUi].join(', ')}`)
-  console.log(`Model: ${config.model} · max ${config.maxSteps} steps`)
+  const pacing = config.maxRequestsPerMinute ? ` · ≤${config.maxRequestsPerMinute} requests/min` : ''
+  console.log(`Model: ${config.model}${values.mock ? '' : ` via ${new URL(config.baseURL).host}`} · max ${config.maxSteps} steps${pacing}`)
   mkdirSync(GENERATED_DIR, { recursive: true })
 
   const state = createRunState()
   let run: AgentRun | undefined
+  let loopFailed = false
   try {
     run = await runAgent({
-      model: values.mock ? createMockModel() : createModel(config),
+      model: values.mock ? createMockModel() : createModel(config, console.log),
       config,
       system: SYSTEM_PROMPT,
       prompt: buildUserPrompt(changes, config),
@@ -80,6 +91,7 @@ async function main() {
     })
   } catch (error) {
     // Keep whatever was written before the failure; verification below decides what survives.
+    loopFailed = true
     console.error('Agent loop failed:', error instanceof Error ? error.message : error)
     report.notes = `The agent loop stopped with an error: ${error instanceof Error ? error.message : String(error)}`
   }
@@ -94,6 +106,10 @@ async function main() {
 
   for (const o of report.outcomes) console.log(`  ${o.status.padEnd(17)} ${o.path} (${o.tests} tests)`)
   console.log(`Report: ${path.relative(REPO_ROOT, outDir)}/report.md`)
+
+  // A loop cut off by the provider (auth, endpoint, quota, rate limit) is an incomplete run, not an
+  // outcome: fail the job so it shows up red. The report and any drafts are still written above.
+  if (loopFailed) process.exitCode = 1
 }
 
 main().catch((error) => {
