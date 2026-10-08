@@ -13,7 +13,9 @@
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:report": "playwright show-report"
+    "test:e2e:report": "playwright show-report",
+    "agent": "tsx tools/e2e-agent/src/index.ts",
+    "agent:typecheck": "tsc -p tools/e2e-agent"
   },
   "dependencies": {
     "@prisma/client": "6.19.3",
@@ -22,11 +24,17 @@
     "vue": "^3.5.43"
   },
   "devDependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.66",
     "@playwright/test": "^1.64.0",
     "@types/node": "^22.15.0",
+    "ai": "^7.0.133",
     "prisma": "6.19.3",
     "tsx": "^4.23.15",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "zod": "^4.6.5"
+  },
+  "overrides": {
+    "magicast": "^0.5.5"
   },
   "allowScripts": {
     "@prisma/client": true,

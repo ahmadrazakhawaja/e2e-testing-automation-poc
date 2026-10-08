@@ -7,6 +7,9 @@ node_modules
 *.db
 *.db-journal
 
+# E2E agent output
+.e2e-agent/
+
 # Playwright
 test-results/
 playwright-report/
