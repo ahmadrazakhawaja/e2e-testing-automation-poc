@@ -1,5 +1,5 @@
 <script setup lang="ts">
-definePageMeta({ middleware: 'guest' })
+definePageMeta({ middleware: 'guest', layout: false })
 useHead({ title: 'Sign in · TaskBoard' })
 
 const { login } = useAuth()
@@ -9,10 +9,7 @@ const email = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
-// Keep the form disabled until hydration: before then, typed values never reach v-model
-// and a click would trigger a native (GET) form submit.
-const hydrated = ref(false)
-onMounted(() => (hydrated.value = true))
+const hydrated = useHydrated()
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 

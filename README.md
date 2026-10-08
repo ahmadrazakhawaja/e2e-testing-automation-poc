@@ -1,7 +1,27 @@
 # E2E Testing Automation POC
 
-A small Nuxt 4 (Vue 3 + Nitro) app with a Prisma/SQLite backend and a login flow,
-covered by a Playwright end-to-end suite that runs entirely from the CLI.
+A small Nuxt 4 (Vue 3 + Nitro) app with a Prisma/SQLite backend: a login flow, a dashboard,
+and a tasks page (create / complete / delete). The login flow is covered by a Playwright
+end-to-end suite that runs entirely from the CLI; tests for the tasks page are meant to be
+generated in CI.
+
+## Pages and API
+
+| Route        | What it does                                              |
+| ------------ | --------------------------------------------------------- |
+| `/login`     | Sign-in form                                              |
+| `/dashboard` | Account info + task summary (auth required)               |
+| `/tasks`     | Add tasks, tick them off, delete them (auth required)     |
+
+| Endpoint                  | Notes                                                    |
+| ------------------------- | -------------------------------------------------------- |
+| `POST /api/auth/login`    | `{ email, password }` → sets the `session` cookie        |
+| `POST /api/auth/logout`   | Destroys the session                                     |
+| `GET /api/auth/me`        | `{ user }` or `{ user: null }`                           |
+| `GET /api/tasks`          | Current user's tasks                                     |
+| `POST /api/tasks`         | `{ title }` (1–120 chars) → `201` with the task          |
+| `PATCH /api/tasks/:id`    | `{ done?, title? }` → `404` if not yours                 |
+| `DELETE /api/tasks/:id`   | `204`, or `404` if not yours                             |
 
 ## Stack
 
@@ -66,6 +86,11 @@ Failures keep a trace, screenshot and video under `test-results/`. Open a trace 
 - **Auth API** (`tests/e2e/auth-api.spec.ts`): 400/401 responses, HttpOnly session cookie,
   no password hash in responses, protected `/api/tasks`.
 
+Not yet covered: the `/tasks` page and the task endpoints (to be generated in CI). Note that the
+existing dashboard test asserts the seeded task count for `demo@example.com`, so generated tests
+that create or change tasks should use their own user or clean up after themselves — the suite
+runs in parallel against one database.
+
 Tests use a Page Object Model (`tests/e2e/pages/`) and an `authenticated` fixture
 (`tests/e2e/fixtures.ts`) that logs in via the API so non-login tests stay fast.
 
@@ -76,9 +101,9 @@ Tests use a Page Object Model (`tests/e2e/pages/`) and an `authenticated` fixtur
 ## Project layout
 
 ```
-app/                 Vue pages, auth middleware, useAuth composable
-server/api/          login / logout / me / tasks endpoints
-server/utils/        Prisma client + session helpers
+app/                 Vue pages, layout, auth middleware, composables
+server/api/          auth and task endpoints
+server/utils/        Prisma client, session and task helpers
 prisma/              schema, seed script, shared seed data
 tests/e2e/           Playwright specs, fixtures, page objects
 playwright.config.ts

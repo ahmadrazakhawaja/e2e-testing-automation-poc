@@ -41,6 +41,6 @@ export default defineConfig({
         reuseExistingServer: !isCI,
         stdout: 'ignore',
         stderr: 'pipe',
-        env: { DATABASE_URL: e2eDatabaseUrl, PORT: String(PORT) },
+        env: { DATABASE_URL: e2eDatabaseUrl, PORT: String(PORT), NUXT_BUILD_DIR: '.nuxt-e2e' },
       },
 })
