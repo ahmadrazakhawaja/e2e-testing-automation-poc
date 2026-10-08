@@ -1,14 +1,16 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { stepCountIs, streamText, type LanguageModel, type LanguageModelUsage } from 'ai'
 import type { AgentConfig } from './config'
+import { rateLimitedFetch } from './rate-limit'
 import type { AgentTools } from './tools'
 
-export function createModel(config: AgentConfig): LanguageModel {
+export function createModel(config: AgentConfig, log: (line: string) => void): LanguageModel {
   const provider = createOpenAICompatible({
     name: 'qwen',
     baseURL: config.baseURL,
     apiKey: config.apiKey,
     includeUsage: true,
+    fetch: rateLimitedFetch({ maxPerMinute: config.maxRequestsPerMinute, max429Retries: 5, log }),
   })
   return provider.chatModel(config.model)
 }
