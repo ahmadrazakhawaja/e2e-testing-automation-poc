@@ -69,6 +69,15 @@ Failures keep a trace, screenshot and video under `test-results/`. Open a trace 
 Tests use a Page Object Model (`tests/e2e/pages/`) and an `authenticated` fixture
 (`tests/e2e/fixtures.ts`) that logs in via the API so non-login tests stay fast.
 
+## E2E agent
+
+`tools/e2e-agent` is an AI agent that writes Playwright tests for whatever a PR changed and opens them
+as a separate PR into that PR's branch. Add the `e2e-agent` label to a PR to run it. See
+[tools/e2e-agent/README.md](tools/e2e-agent/README.md).
+
+Tests that change data use the `signedInUser` fixture: a fresh user per test, deleted afterwards
+(`tests/e2e/support/test-users.ts`). Conventions for humans and the agent: `tests/e2e/CONVENTIONS.md`.
+
 ## CI
 
 `.github/workflows/e2e.yml` runs the same `npm run test:e2e` on every push/PR and uploads the HTML report as an artifact.

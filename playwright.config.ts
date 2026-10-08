@@ -8,6 +8,9 @@ const isCI = !!process.env.CI
 // Tests run against a separate SQLite file whose demo data is re-seeded on every run.
 // Absolute path so the built server resolves it no matter where it is started from.
 const e2eDatabaseUrl = `file:${fileURLToPath(new URL('./prisma/e2e.db', import.meta.url))}`
+// Test workers create throwaway users directly in the DB (tests/e2e/support/test-users.ts).
+// Set it here, otherwise Prisma would fall back to .env and write to the dev database.
+process.env.DATABASE_URL ??= e2eDatabaseUrl
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -41,6 +44,6 @@ export default defineConfig({
         reuseExistingServer: !isCI,
         stdout: 'ignore',
         stderr: 'pipe',
-        env: { DATABASE_URL: e2eDatabaseUrl, PORT: String(PORT) },
+        env: { DATABASE_URL: process.env.DATABASE_URL, PORT: String(PORT), NUXT_BUILD_DIR: '.nuxt-e2e' },
       },
 })

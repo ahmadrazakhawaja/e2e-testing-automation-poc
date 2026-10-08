@@ -1,0 +1,131 @@
+name: E2E agent
+
+# Opt-in: runs when a PR gets the `e2e-agent` label, and again on new pushes while the label is on.
+on:
+  pull_request:
+    types: [labeled, synchronize, reopened]
+
+concurrency:
+  group: e2e-agent-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    # Same-repo PRs only (forks get no secrets), never the agent's own PRs, label must be present.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !startsWith(github.event.pull_request.head.ref, 'e2e-agent/') &&
+      contains(github.event.pull_request.labels.*.name, 'e2e-agent') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'e2e-agent')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Read-only: the model and the specs it writes run in this job.
+    permissions:
+      contents: read
+    outputs:
+      added: ${{ steps.result.outputs.added }}
+    env:
+      DATABASE_URL: file:${{ github.workspace }}/prisma/e2e.db
+      E2E_BASE_URL: http://localhost:3100
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false # keep GITHUB_TOKEN out of .git/config, away from generated code
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: cp .env.example .env && npm ci
+      - run: npx playwright install --with-deps chromium
+
+      - name: Build and start the app
+        env:
+          NUXT_BUILD_DIR: .nuxt-e2e
+        run: |
+          npm run db:setup
+          npm run build
+          PORT=3100 nohup npm start > app.log 2>&1 &
+          for i in $(seq 60); do curl -sf "$E2E_BASE_URL/api/auth/me" > /dev/null && exit 0; sleep 1; done
+          cat app.log; exit 1
+
+      - name: Run the agent
+        env:
+          E2E_AGENT_API_KEY: ${{ secrets.E2E_AGENT_API_KEY }}
+          E2E_AGENT_MODEL: ${{ vars.E2E_AGENT_MODEL }}
+          E2E_AGENT_BASE_URL: ${{ vars.E2E_AGENT_BASE_URL }}
+          E2E_AGENT_ENABLE_THINKING: ${{ vars.E2E_AGENT_ENABLE_THINKING }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: npm run agent -- --base "$BASE_SHA" --head "$HEAD_SHA" --pr "$PR_NUMBER"
+
+      # Existing and generated tests together: catches generated specs that interfere with others.
+      - name: Full suite
+        run: npx playwright test
+
+      - id: result
+        run: |
+          added=$(jq '[.outcomes[] | select(.status == "added")] | length' .e2e-agent/report.json)
+          echo "added=$added" >> "$GITHUB_OUTPUT"
+          cat .e2e-agent/report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: e2e-agent
+          include-hidden-files: true
+          path: |
+            .e2e-agent/
+            tests/e2e/generated/*.spec.ts
+            playwright-report/
+            app.log
+          retention-days: 14
+
+  publish:
+    needs: generate
+    runs-on: ubuntu-latest
+    # Requires: Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests".
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      ADDED: ${{ needs.generate.outputs.added }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-agent
+          path: agent-output
+
+      - name: Open or update the agent PR
+        if: env.ADDED != '0'
+        run: |
+          branch="e2e-agent/pr-$PR_NUMBER"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$branch"
+          cp agent-output/tests/e2e/generated/*.spec.ts tests/e2e/generated/
+          git add tests/e2e/generated
+          git commit -m "test(e2e): agent-generated tests for #$PR_NUMBER"
+          git push --force origin "$branch"
+
+          existing=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --body-file agent-output/.e2e-agent/report.md
+          else
+            url=$(gh pr create --base "$HEAD_REF" --head "$branch" \
+              --title "test(e2e): agent-generated tests for #$PR_NUMBER" \
+              --body-file agent-output/.e2e-agent/report.md)
+            gh pr comment "$PR_NUMBER" --body "E2E agent opened $url with generated tests for this PR."
+          fi
+
+      - name: Report on the source PR when nothing was added
+        if: env.ADDED == '0'
+        run: gh pr comment "$PR_NUMBER" --body-file agent-output/.e2e-agent/report.md
